@@ -1,0 +1,20 @@
+### 1. Health Check
+GET http://localhost:8000/health
+
+### 2. RAG Search: Regulatory Compliance Query
+POST http://localhost:8000/api/v1/rag/search
+Content-Type: application/json
+
+{
+  "query": "Are we allowed to share our financial models with the SEC?",
+  "top_k": 3
+}
+
+### 3. RAG Search: Liquidity Query
+POST http://localhost:8000/api/v1/rag/search
+Content-Type: application/json
+
+{
+  "query": "What happens if we don't have enough cash?",
+  "top_k": 3
+}

@@ -1,0 +1,70 @@
+services:
+  # 1. Spark Connect Server (The heavy lifter)
+  spark-connect:
+    image: apache/spark:3.5.1
+    container_name: spark-connect
+    command: >
+      bash -c "mkdir -p /tmp/.ivy2/cache && /opt/spark/sbin/start-connect-server.sh --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.spark:spark-connect_2.12:3.5.1,org.postgresql:postgresql:42.7.3"
+    ports:
+      - "15002:15002" # Spark Connect Port
+    environment:
+      - SPARK_NO_DAEMONIZE=true
+      - SPARK_CONNECT_AUTH_ENABLED=false
+
+  # 2. PostgreSQL 17 + pgvector
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: bfsi-postgres
+    environment:
+      POSTGRES_USER: bfsi_admin
+      POSTGRES_PASSWORD: super_secret_password
+      POSTGRES_DB: bfsi_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 3. MLflow (For SR 11-7 Compliance)
+  mlflow:
+    image: python:3.11-slim
+    container_name: bfsi-mlflow
+    ports:
+      - "5000:5000"
+    command: >
+      bash -c "pip install mlflow==2.16.2 && mlflow server --host 0.0.0.0 --port 5000"
+
+  # 4. FastAPI Application (The Production Serving Layer - UNCHANGED)
+  fastapi-app:
+    build: .
+    container_name: bfsi-fastapi
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/workspace
+    environment:
+      - PYSPARK_ALLOW_INSECURE_GATEWAY=1
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - spark-connect
+      - postgres
+
+  # 5. NEW: Interactive Data Science & EDA Environment
+  pyspark-dev:
+    build: .
+    container_name: bfsi_pyspark_dev
+    ports:
+      - "4040:4040"   # Spark UI (for local Spark jobs)
+      - "8888:8888"   # Jupyter Notebook Server
+    volumes:
+      - ./:/workspace
+    environment:
+      - MLFLOW_TRACKING_URI=http://bfsi-mlflow:5000
+      - PYSPARK_ALLOW_INSECURE_GATEWAY=1
+    command: tail -f /dev/null # Keeps container running for PyCharm/Jupyter attachment
+    depends_on:
+      - spark-connect
+      - postgres
+      - mlflow
+
+volumes:
+  postgres_data:
